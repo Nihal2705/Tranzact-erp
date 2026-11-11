@@ -10,6 +10,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const authRoutes = require("./routes/authRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const orderRoutes = require("./routes/orderRoutes");
+const productionRoutes = require("./routes/productionRoutes");
 
 app.use(cors({ origin: FRONTEND_URL }));
 app.use(express.json());
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/items", itemRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/production", productionRoutes);
 
 // Health check endpoint
 app.get("/api/health", async (req, res) => {
