@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../services/api";
 
 const TLogo = ({ className = "h-8 w-8" }) => (
   <svg viewBox="0 0 100 100" className={className} fill="currentColor" aria-hidden="true">
@@ -7,7 +8,6 @@ const TLogo = ({ className = "h-8 w-8" }) => (
     <polygon points="36,46 64,40 64,98 36,98" />
   </svg>
 );
-
 
 const Wordmark = ({ text = "text-white", erp = "text-blue-300", size = "text-2xl", logo = "h-7 w-7" }) => (
   <div className="flex items-end">
@@ -30,17 +30,17 @@ export default function LoginPage() {
     if (!email.trim() || !password) return setError("Email and password are required");
     setBusy(true);
     try {
-      // REAL VERSION:
-      // const { data } = await api.post("/auth/login", { email, password });
-      // FAKE VERSION (remove later):
-      const role = email.includes("worker") ? "Worker" : email.includes("manager") ? "Manager" : "Admin";
-      const data = { token: "fake-token", user: { id: 1, name: role + " User", email, role } };
-
+      const data = await api("/auth/login", {
+        method: "POST",
+        body: { email: email.trim(), password },
+      });
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
       navigate(data.user.role === "Worker" ? "/inventory" : "/dashboard");
-    } catch {
-      setError("Invalid email or password");
+    } catch (err) {
+      if (err.response?.status === 401) setError("Invalid email or password");
+      else if (!err.response) setError("Cannot reach the server. Check your connection and try again.");
+      else setError(err.response?.data?.error || "Unable to sign in");
     } finally {
       setBusy(false);
     }

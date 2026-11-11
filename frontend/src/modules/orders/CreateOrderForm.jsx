@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Modal from "../../components/Modal";
 import OrderLines from "./OrderLines";
 import { createOrder } from "./sampleOrders";
+import { api } from "../../services/api";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const emptyLine = { item_id: "", quantity: "", price: "" };
@@ -12,9 +13,29 @@ export default function CreateOrderForm({ open, onClose, onCreated }) {
   const [orderDate, setOrderDate] = useState(today());
   const [dueDate, setDueDate] = useState("");
   const [lines, setLines] = useState([{ ...emptyLine }]);
+  const [items, setItems] = useState([]);
+  const [itemsError, setItemsError] = useState("");
   const [errors, setErrors] = useState({ lines: [] });
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState("");
+
+  const loadItems = async () => {
+    setItemsError("");
+    try {
+      setItems(await api("/items"));
+    } catch (err) {
+      setItemsError(err.response?.data?.error || err.message || "Could not load inventory items.");
+    }
+  };
+  useEffect(() => {
+    if (!open) return;
+    api("/items")
+      .then((loadedItems) => {
+        setItems(loadedItems);
+        setItemsError("");
+      })
+      .catch((err) => setItemsError(err.response?.data?.error || err.message || "Could not load inventory items."));
+  }, [open]);
 
   const reset = () => {
     setOrderType("SALES"); setParty(""); setOrderDate(today()); setDueDate("");
@@ -28,6 +49,7 @@ export default function CreateOrderForm({ open, onClose, onCreated }) {
     if (!orderDate) e.orderDate = "Order date is required";
     if (dueDate && dueDate < orderDate) e.dueDate = "Due date cannot be before order date";
     if (lines.length === 0) e.linesMsg = "Add at least one line";
+    if (items.length === 0) e.linesMsg = "No inventory items are available";
     let bad = false;
     e.lines = lines.map((l) => {
       const le = {};
@@ -54,8 +76,8 @@ export default function CreateOrderForm({ open, onClose, onCreated }) {
       });
       onCreated(order);
       reset();
-    } catch {
-      setServerError("Could not create the order. Please try again.");
+    } catch (err) {
+      setServerError(err.response?.data?.error || err.message || "Could not create the order.");
     } finally { setBusy(false); }
   };
 
@@ -66,6 +88,9 @@ export default function CreateOrderForm({ open, onClose, onCreated }) {
     <Modal open={open} wide title="Create Order" onClose={close} onConfirm={submit} confirmText="Create Order" busy={busy}>
       <div className="mt-3 space-y-3">
         {serverError && <div className="rounded bg-red-50 p-2 text-sm text-red-700">{serverError}</div>}
+        {itemsError && <div className="rounded bg-red-50 p-2 text-sm text-red-700">{itemsError}
+          <button type="button" onClick={loadItems} className="ml-2 underline">Retry</button>
+        </div>}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">Order type</label>
@@ -86,7 +111,7 @@ export default function CreateOrderForm({ open, onClose, onCreated }) {
             <input type="date" className={box(errors.dueDate)} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />{msg(errors.dueDate)}
           </div>
         </div>
-        <OrderLines lines={lines} setLines={setLines} errors={errors.lines} />
+        <OrderLines lines={lines} setLines={setLines} errors={errors.lines} items={items} />
         {msg(errors.linesMsg)}
       </div>
     </Modal>

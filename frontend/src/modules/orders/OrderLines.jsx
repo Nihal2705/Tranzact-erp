@@ -1,12 +1,10 @@
-import { sampleItems } from "./sampleOrders";
-
-export default function OrderLines({ lines, setLines, errors = [] }) {
+export default function OrderLines({ lines, setLines, errors = [], items = [] }) {
   const update = (i, patch) => setLines(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const remove = (i) => setLines(lines.filter((_, idx) => idx !== i));
   const used = (i) => lines.filter((_, idx) => idx !== i).map((l) => l.item_id);
 
   const onPick = (i, value) => {
-    const item = sampleItems.find((s) => s.id === Number(value));
+    const item = items.find((s) => s.id === Number(value));
     update(i, { item_id: item ? item.id : "", price: item ? item.price : "" });
   };
 
@@ -30,7 +28,7 @@ export default function OrderLines({ lines, setLines, errors = [] }) {
                 <select className={`w-full rounded border p-2 text-sm ${border(e.item)}`} value={l.item_id}
                   onChange={(ev) => onPick(i, ev.target.value)}>
                   <option value="">Select item</option>
-                  {sampleItems.filter((s) => !used(i).includes(s.id) || s.id === l.item_id)
+                  {items.filter((s) => !used(i).includes(s.id) || s.id === l.item_id)
                     .map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>{err(e.item)}
               </div>

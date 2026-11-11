@@ -5,11 +5,14 @@ import Modal from "../components/Modal";
 import OrderTimeline from "../modules/orders/OrderTimeline";
 import { fetchOrder, fetchTimeline, updateOrderStatus } from "../modules/orders/sampleOrders";
 
-const errorMessage = (err) => {
-  const res = err.response;
-  if (!res) return "Cannot reach the server. Check your connection and try again.";
-  if (res.status === 403) return "You do not have permission to do this.";
-  return res.data?.error || "Something went wrong. Please try again.";
+export const errorMessage = (err) => {
+  const status = err.response?.status ?? err.status;
+  if (status === 403) return "You do not have permission to do this.";
+  const msg = err.response?.data?.error || err.data?.error || err.message;
+  if (!status && (!msg || /failed to fetch|network/i.test(msg))) {
+    return "Cannot reach the server. Check your connection and try again.";
+  }
+  return msg || "Something went wrong. Please try again.";
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
