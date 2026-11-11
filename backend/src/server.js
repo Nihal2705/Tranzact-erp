@@ -11,6 +11,7 @@ const authRoutes = require("./routes/authRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const productionRoutes = require("./routes/productionRoutes");
+const reportRoutes = require("./routes/reportRoutes");
 
 app.use(cors({ origin: FRONTEND_URL }));
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/items", itemRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/production", productionRoutes);
+app.use("/api/reports", reportRoutes);
 
 // Health check endpoint
 app.get("/api/health", async (req, res) => {
