@@ -1,5 +1,8 @@
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 const jwt = require("jsonwebtoken");
-//checking for the user is logged in or not
+
+// checking for the user is logged in or not
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
   const token  = header.replace("Bearer ", "");
@@ -19,6 +22,9 @@ function requireAuth(req, res, next) {
 // right role access for the user
 function allowRoles(...roles) {
   return (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({ error: "Please log in again" });
+    }
     if (roles.includes(req.user.role)) {
       next();
     } else {
