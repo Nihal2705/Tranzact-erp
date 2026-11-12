@@ -5,9 +5,9 @@ INSERT INTO roles (name) VALUES
   ('Worker');
 
 INSERT INTO users (name, email, password_hash, role_id) VALUES
-  ('Alice Admin',  'admin@tranzact.com',   '$2b$10$dDrri.uTzjHkQ0X2bn1a..0ykyrlANdTcR0LfaSZQIgeZ3It9aic6',   1),
-  ('Mark Manager', 'manager@tranzact.com', '$2b$10$CDOVT5VzYGf1B0sd1p/NO.WQjn4C.4cWhD2t3DOA3dTEOylm/qJe2', 2),
-  ('Wendy Worker', 'worker@tranzact.com',  '$2b$10$sYhwKDBgkhMgvjCbTcj9QOp5lZdwpgWLInVkFw1KkN3vPr6pzQ6mm',  3);
+  ('Alice Admin',  'admin@tranzact.com',   '$2b$10$wp7ws0Mmx.tKI2fAy7Q7FeKDoBi7eN5w0KXxWvZjQx6zkhC2sDFV6',   1),
+  ('Mark Manager', 'manager@tranzact.com', '$2b$10$i0G9Xvd9hlrjtvLx1fw0QO7feqroP3R.ftbEtUbxBmmZhE8gcZ6j6', 2),
+  ('Wendy Worker', 'worker@tranzact.com',  '$2b$10$DBjc4dJQMib1sckmAQ/85.g8TJpgaIMpT0hGjJdUIq5WrUym2qk/O',  3);
 
 -- ITEMS (Raw)
 INSERT INTO items (name, item_type, unit, quantity, price, low_stock_limit) VALUES
