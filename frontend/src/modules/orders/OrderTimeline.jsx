@@ -5,7 +5,6 @@ export default function OrderTimeline({ events = [], total, isSales, loading, er
   const find = (name) => events.find((e) => e.event === name);
   const partials = events.filter((e) => e.event === "Partially Dispatched");
 
-  // 4 stages. A partial dispatch can appear more than once.
   const rows = [
     { name: "Order Created", ev: find("Order Created") },
     { name: "Invoice Created", ev: find("Invoice Created") },
@@ -22,7 +21,7 @@ export default function OrderTimeline({ events = [], total, isSales, loading, er
           <h2 className="font-semibold">Timeline</h2>
           {!isSales && <p className="text-xs text-gray-500">For purchase orders, “Dispatched” means goods received.</p>}
         </div>
-        <span className="text-sm font-semibold">Order total: ₹{total.toLocaleString("en-IN")}</span>
+        <span className="text-sm font-semibold">Order total: ₹{Number(total || 0).toLocaleString("en-IN")}</span>
       </div>
 
       {loading && <p className="text-sm text-gray-500">Loading timeline…</p>}

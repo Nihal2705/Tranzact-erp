@@ -10,7 +10,6 @@ export default function OrderTable({ rows, loading, error, onRetry, totalCount }
     <tr><td colSpan="10" className="p-8 text-center text-gray-500">{children}</td></tr>
   );
 
- 
   const isLate = (o) => o.due_date && o.due_date < today() && o.goods_status !== "Dispatched";
 
   return (
@@ -31,25 +30,28 @@ export default function OrderTable({ rows, loading, error, onRetry, totalCount }
             </Message>)}
           {!loading && !error && rows.length === 0 && (
             <Message>{totalCount === 0 ? "No orders yet. Click Create Order." : "No orders match your filters."}</Message>)}
-          {!loading && !error && rows.map((o) => (
-            <tr key={o.id} onClick={() => navigate(`/orders/${o.id}`)} className="cursor-pointer border-t hover:bg-gray-50">
-              <td className="px-3 py-3 font-medium">#{o.id}</td>
-              <td className="px-3 py-3">{o.order_type === "SALES" ? "Sales" : "Purchase"}</td>
-              <td className="px-3 py-3">{o.party_name}</td>
-              <td className="whitespace-nowrap px-3 py-3">{o.order_date}</td>
-              <td className={`whitespace-nowrap px-3 py-3 ${isLate(o) ? "font-semibold text-red-600" : ""}`}>
-                {o.due_date || "—"}{isLate(o) && " (late)"}
-              </td>
-              <td className="px-3 py-3">{o.lines.length} {o.lines.length === 1 ? "item" : "items"}</td>
-              <td className="whitespace-nowrap px-3 py-3">₹{o.total_amount.toLocaleString("en-IN")}</td>
-              <td className="px-3 py-3"><StatusBadge status={o.invoice_status} /></td>
-              <td className="px-3 py-3"><StatusBadge status={o.goods_status} /></td>
-              <td className="px-3 py-3">
-                <button onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}`); }}
-                  className="rounded border px-3 py-1 text-xs hover:bg-gray-100">View</button>
-              </td>
-            </tr>
-          ))}
+          {!loading && !error && rows.map((o) => {
+            const count = (o.lines || []).length;
+            return (
+              <tr key={o.id} onClick={() => navigate(`/orders/${o.id}`)} className="cursor-pointer border-t hover:bg-gray-50">
+                <td className="px-3 py-3 font-medium">#{o.id}</td>
+                <td className="px-3 py-3">{o.order_type === "SALES" ? "Sales" : "Purchase"}</td>
+                <td className="px-3 py-3">{o.party_name}</td>
+                <td className="whitespace-nowrap px-3 py-3">{o.order_date}</td>
+                <td className={`whitespace-nowrap px-3 py-3 ${isLate(o) ? "font-semibold text-red-600" : ""}`}>
+                  {o.due_date || "—"}{isLate(o) && " (late)"}
+                </td>
+                <td className="px-3 py-3">{count} {count === 1 ? "item" : "items"}</td>
+                <td className="whitespace-nowrap px-3 py-3">₹{Number(o.total_amount || 0).toLocaleString("en-IN")}</td>
+                <td className="px-3 py-3"><StatusBadge status={o.invoice_status} /></td>
+                <td className="px-3 py-3"><StatusBadge status={o.goods_status} /></td>
+                <td className="px-3 py-3">
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/orders/${o.id}`); }}
+                    className="rounded border px-3 py-1 text-xs hover:bg-gray-100">View</button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

@@ -4,18 +4,10 @@ import StatusBadge from "../components/StatusBadge";
 import Modal from "../components/Modal";
 import OrderTimeline from "../modules/orders/OrderTimeline";
 import { fetchOrder, fetchTimeline, updateOrderStatus } from "../modules/orders/sampleOrders";
-
-export const errorMessage = (err) => {
-  const status = err.response?.status ?? err.status;
-  if (status === 403) return "You do not have permission to do this.";
-  const msg = err.response?.data?.error || err.data?.error || err.message;
-  if (!status && (!msg || /failed to fetch|network/i.test(msg))) {
-    return "Cannot reach the server. Check your connection and try again.";
-  }
-  return msg || "Something went wrong. Please try again.";
-};
+import { errorMessage } from "../modules/orders/orderUtils";
 
 const today = () => new Date().toISOString().slice(0, 10);
+const money = (n) => Number(n || 0).toLocaleString("en-IN");
 
 function Info({ label, children }) {
   return (
@@ -35,8 +27,8 @@ export default function OrderDetailsPage() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [qty, setQty] = useState({});            
-  const [confirm, setConfirm] = useState(null); 
+  const [qty, setQty] = useState({});
+  const [confirm, setConfirm] = useState(null);
   const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
@@ -70,8 +62,10 @@ export default function OrderDetailsPage() {
   const isSales = order.order_type === "SALES";
   const verb = isSales ? "Dispatch" : "Receive";
   const direction = isSales ? "down" : "up";
-  const toSend = order.lines.filter((l) => Number(qty[l.id]) > 0);
+  const lines = order.lines || [];
+  const toSend = lines.filter((l) => Number(qty[l.id]) > 0);
   const isLate = order.due_date && order.due_date < today() && order.goods_status !== "Dispatched";
+  const remainingOf = (l) => Number(l.quantity) - Number(l.fulfilled_qty);
 
   const openConfirm = (kind) => {
     if (!requestId) setRequestId(crypto.randomUUID());
@@ -80,10 +74,10 @@ export default function OrderDetailsPage() {
 
   const askDispatch = () => {
     setFormError("");
-    for (const l of order.lines) {
+    for (const l of lines) {
       const n = Number(qty[l.id] || 0);
       if (isNaN(n) || n < 0) return setFormError(`${l.item_name}: enter a valid number`);
-      if (n > l.quantity - l.fulfilled_qty) return setFormError(`${l.item_name}: cannot exceed remaining (${l.quantity - l.fulfilled_qty})`);
+      if (n > remainingOf(l)) return setFormError(`${l.item_name}: cannot exceed remaining (${remainingOf(l)})`);
     }
     if (toSend.length === 0) return setFormError("Enter a quantity for at least one line");
     openConfirm("dispatch");
@@ -95,9 +89,8 @@ export default function OrderDetailsPage() {
       ? { invoice_status: "Created" }
       : { dispatch: toSend.map((l) => ({ order_item_id: l.id, qty: Number(qty[l.id]) })), request_id: requestId };
     try {
-      // REAL VERSION: const { data } = await api.put(`/orders/${id}/status`, payload);
       const data = await updateOrderStatus(id, payload);
-      setOrder(data);                       // show numbers and badges only after the reply
+      setOrder(data);
       loadTimeline();
       setQty({}); setRequestId(""); setConfirm(null);
       setToast(payload.invoice_status ? "Invoice created" : `Goods ${isSales ? "dispatched" : "received"}`);
@@ -105,7 +98,7 @@ export default function OrderDetailsPage() {
     } catch (err) {
       setConfirm(null);
       if (err.response?.status === 401) return navigate("/login");
-      setFormError(errorMessage(err));      // old numbers stay on screen
+      setFormError(errorMessage(err));
     } finally { setBusy(false); }
   };
 
@@ -113,7 +106,6 @@ export default function OrderDetailsPage() {
     <div className="space-y-5">
       {toast && <div className="fixed right-4 top-4 z-50 rounded bg-green-600 px-4 py-2 text-sm text-white shadow">{toast}</div>}
 
-      {/* Top row: breadcrumb + actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav className="text-sm text-gray-500">
           <Link to="/orders" className="text-blue-600 hover:underline">Orders</Link>
@@ -132,7 +124,6 @@ export default function OrderDetailsPage() {
         </div>
       </div>
 
-      {/* Title row: two separate badges */}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-bold text-gray-900">Order #{order.id}</h1>
         <div className="flex items-center gap-2">
@@ -141,7 +132,6 @@ export default function OrderDetailsPage() {
         </div>
       </div>
 
-      {/* Info card */}
       <div className="rounded-xl border bg-white p-5 shadow-sm">
         <div className="grid grid-cols-2 gap-5 md:grid-cols-5">
           <Info label={isSales ? "Customer" : "Supplier"}>{order.party_name}</Info>
@@ -152,19 +142,18 @@ export default function OrderDetailsPage() {
               {order.due_date || "—"}{isLate && " (late)"}
             </span>
           </Info>
-          <Info label="Order Total">₹{order.total_amount.toLocaleString("en-IN")}</Info>
+          <Info label="Order Total">₹{money(order.total_amount)}</Info>
         </div>
       </div>
 
       {formError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{formError}</div>}
 
-      {/* Two columns: lines table + timeline */}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="rounded-xl border bg-white shadow-sm">
             <div className="flex items-center justify-between border-b px-5 py-3">
               <h2 className="text-lg font-semibold text-gray-900">Items</h2>
-              <span className="text-sm text-gray-500">{order.lines.length} {order.lines.length === 1 ? "item" : "items"}</span>
+              <span className="text-sm text-gray-500">{lines.length} {lines.length === 1 ? "item" : "items"}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -178,16 +167,16 @@ export default function OrderDetailsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {order.lines.map((l) => (
+                  {lines.map((l) => (
                     <tr key={l.id} className="border-t">
                       <td className="px-4 py-3 font-medium text-gray-900">{l.item_name}</td>
-                      <td className="px-4 py-3">{l.quantity}</td>
-                      <td className="px-4 py-3">{l.fulfilled_qty}</td>
-                      <td className="px-4 py-3">{l.quantity - l.fulfilled_qty}</td>
+                      <td className="px-4 py-3">{Number(l.quantity)}</td>
+                      <td className="px-4 py-3">{Number(l.fulfilled_qty)}</td>
+                      <td className="px-4 py-3">{remainingOf(l)}</td>
                       <td className="px-4 py-3">
                         <input type="number" min="0" placeholder="0"
                           className="w-24 rounded-lg border p-2 text-sm disabled:bg-gray-100"
-                          value={qty[l.id] || ""} disabled={l.quantity === l.fulfilled_qty}
+                          value={qty[l.id] || ""} disabled={remainingOf(l) <= 0}
                           onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} />
                       </td>
                     </tr>
@@ -196,8 +185,8 @@ export default function OrderDetailsPage() {
               </table>
             </div>
             <div className="flex items-center justify-between border-t bg-gray-50 px-5 py-3 text-sm">
-              <span className="text-gray-500">{order.lines.length} {order.lines.length === 1 ? "line" : "lines"}</span>
-              <span className="text-base font-semibold text-gray-900">Order total: ₹{order.total_amount.toLocaleString("en-IN")}</span>
+              <span className="text-gray-500">{lines.length} {lines.length === 1 ? "line" : "lines"}</span>
+              <span className="text-base font-semibold text-gray-900">Order total: ₹{money(order.total_amount)}</span>
             </div>
           </div>
         </div>
@@ -208,12 +197,11 @@ export default function OrderDetailsPage() {
         </div>
       </div>
 
-      {/* Confirmations */}
       <Modal open={confirm === "invoice"} title="Create invoice?" message="The invoice status will change to Created."
         onClose={() => setConfirm(null)} onConfirm={apply} busy={busy} />
       <Modal open={confirm === "dispatch"} title={`${verb} goods?`} busy={busy}
         message={toSend.map((l) =>
-          `${verb} ${qty[l.id]} of ${l.quantity} ${l.item_name}? Stock will go ${direction} by ${qty[l.id]}.`).join(" ")}
+          `${verb} ${qty[l.id]} of ${Number(l.quantity)} ${l.item_name}? Stock will go ${direction} by ${qty[l.id]}.`).join(" ")}
         onClose={() => setConfirm(null)} onConfirm={apply} />
     </div>
   );

@@ -19,7 +19,7 @@ function withProductionDetails(order, items) {
       ...material,
       unit: rawItem?.unit || "",
       qty_per_unit: bomLine?.qty_per_unit,
-      unit_cost: rawItem?.price,
+      unit_cost: Number(rawItem?.price) || 0,
     };
   });
 
@@ -27,6 +27,7 @@ function withProductionDetails(order, items) {
     ...order,
     finished_unit: finishedItem?.unit || "",
     materials,
+    est_cost: materials.reduce((sum, m) => sum + Number(m.qty_needed) * m.unit_cost, 0),
   };
 }
 

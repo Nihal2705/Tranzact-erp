@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import CreateOrderForm from "../modules/orders/CreateOrderForm";
 import OrderTable from "../modules/orders/OrderTable";
 import { fetchOrders } from "../modules/orders/sampleOrders";
+import { errorMessage } from "../modules/orders/orderUtils";
 
 const GROUP = {
   "Not Dispatched": "PENDING",
@@ -80,7 +81,7 @@ export default function OrdersPage() {
   const load = async () => {
     setLoading(true); setError("");
     try { setOrders(await fetchOrders()); }
-    catch { setError("Could not load orders. Please try again."); }
+       catch (err) { setError(errorMessage(err)); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
