@@ -1,0 +1,255 @@
+# System Architecture
+
+TranZact ERP is a simplified, TranZact-inspired manufacturing ERP. A factory can see its stock, follow its orders, track what it is making, and read simple reports, all in one web app.
+
+This document explains how the system is built and how its parts talk to each other. For screens and the style guide see [ui-design.md](ui-design.md). For team rules see [project-workflow.md](project-workflow.md). For the API list see [api-specification.md](api-specification.md) and for the tables see [database-design.md](database-design.md).
+
+## 1. Technology stack
+
+| Area | Technology |
+| --- | --- |
+| Frontend | React + Vite, JavaScript |
+| UI styling | Tailwind CSS |
+| Routing | React Router |
+| API communication | Axios |
+| Charts | Recharts |
+| Backend | Node.js + Express.js |
+| Database | PostgreSQL (SQL) |
+| Authentication | JWT (JSON Web Token) + bcrypt password hashing |
+| API testing | Postman |
+| UI/UX design | Figma-style mockups (see [ui-design.md](ui-design.md)) |
+| Version control | Git + GitHub |
+| Frontend hosting | Vercel |
+| Backend hosting | Render |
+| Database hosting | Neon (PostgreSQL) |
+
+JavaScript is the only programming language used in the project.
+
+## 2. System architecture
+
+```mermaid
+flowchart LR
+    U["User<br/>Admin / Manager / Worker"] --> FE
+
+    subgraph Vercel["Vercel (frontend hosting)"]
+        FE["React + Vite app<br/>Tailwind CSS, React Router,<br/>Axios, Recharts"]
+    end
+
+    subgraph Render["Render (backend hosting)"]
+        direction TB
+        MW["Middleware<br/>CORS, JWT check, role check"]
+        RT["Routes"]
+        CT["Controllers"]
+        SV["Services<br/>stock rules"]
+        MW --> RT --> CT --> SV
+    end
+
+    subgraph Neon["Neon (database hosting)"]
+        DB[("PostgreSQL")]
+    end
+
+    FE -- "HTTPS + JSON<br/>Authorization: Bearer token" --> MW
+    SV -- "SQL via pg" --> DB
+    CT -- "SQL via pg" --> DB
+```
+
+The frontend and backend are separate applications. They talk to each other only through the REST API, using JSON. The browser never talks to the database directly.
+
+## 3. How a request travels (login and a protected call)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant FE as React app
+    participant API as Express API
+    participant DB as PostgreSQL
+
+    User->>FE: Enter username and password
+    FE->>API: POST /api/auth/login
+    API->>DB: Find user, compare bcrypt hash
+    DB-->>API: User and role
+    API-->>FE: JWT token and user info
+    FE->>FE: Save token and user in the browser
+
+    User->>FE: Open Inventory page
+    FE->>API: GET /api/items with Bearer token
+    API->>API: Check token, check role
+    API->>DB: SELECT items
+    DB-->>API: Rows
+    API-->>FE: JSON list
+    FE-->>User: Inventory table
+```
+
+If the token is missing or wrong, the API answers `401`. If the role is not allowed, it answers `403 Forbidden`. All errors come back as `{ "error": "A clear message" }`.
+
+## 4. Folder structure
+
+```
+tranzact-erp/
+├── frontend/
+│   └── src/
+│       ├── components/    shared parts (Layout, Modal, StatusBadge ...)
+│       ├── pages/         one file per screen
+│       ├── modules/       inventory, orders, production, dashboard
+│       ├── services/      Axios API helper
+│       ├── hooks/
+│       └── App.jsx
+├── backend/
+│   └── src/
+│       ├── config/        database connection
+│       ├── controllers/   request handlers
+│       ├── routes/        URL to controller mapping
+│       ├── middleware/    JWT check, role check
+│       ├── services/      shared business rules (stock changes)
+│       └── server.js
+├── database/
+│   ├── schema.sql         creates the tables
+│   └── seed.sql           sample data and starting users
+├── docs/                  all documentation (this folder)
+├── .gitignore
+└── README.md
+```
+
+`.env` files stay on each person's laptop and are never committed. A `.env.example` with empty values is shared instead.
+
+## 5. Roles and permissions
+
+Permissions are enforced in the backend. Hiding a button in the frontend only keeps the screen tidy.
+
+| Action | Admin | Manager | Worker |
+| --- | :---: | :---: | :---: |
+| Log in | Yes | Yes | Yes |
+| View items, stock history, low-stock list | Yes | Yes | Yes |
+| Add or edit item details | Yes | Yes | No |
+| Change stock quantity (with a reason) | Yes | Yes | Yes |
+| View orders and order timeline | Yes | Yes | No |
+| Create orders, create invoice, dispatch or receive goods | Yes | Yes | No |
+| View production orders | Yes | Yes | Yes |
+| Create production orders | Yes | Yes | No |
+| Update production status and progress | Yes | Yes | Yes |
+| View dashboard and reports | Yes | Yes | No |
+| Manage users | Through seed data or pgAdmin | No | No |
+| Delete records | There are no delete APIs | No | No |
+
+There is no public registration page. The starting accounts (one Admin, one Manager, one Worker) come from `seed.sql`.
+
+## 6. Data model
+
+```mermaid
+erDiagram
+    ROLES ||--o{ USERS : has
+    USERS ||--o{ STOCK_HISTORY : makes
+    ITEMS ||--o{ STOCK_HISTORY : records
+    ORDERS ||--|{ ORDER_ITEMS : contains
+    ITEMS ||--o{ ORDER_ITEMS : "appears in"
+    ITEMS ||--o{ PRODUCTION_ORDERS : "is made by"
+    ITEMS ||--o{ BOM_LINES : "needs as material"
+    ITEMS ||--o{ BOM_LINES : "is recipe for"
+    PRODUCTION_ORDERS ||--o{ STOCK_HISTORY : changes
+    ORDERS ||--o{ STOCK_HISTORY : changes
+
+    ROLES {
+        int id
+        text name
+    }
+    USERS {
+        int id
+        text username
+        text password_hash
+        int role_id
+    }
+    ITEMS {
+        int id
+        text name
+        text type "RAW or FINISHED"
+        text unit
+        numeric quantity
+        numeric price
+        numeric low_stock_limit
+    }
+    STOCK_HISTORY {
+        int id
+        int item_id
+        numeric change_qty
+        text changed_via
+        text reason
+    }
+    ORDERS {
+        int id
+        text order_type "SALES or PURCHASE"
+        text party_name
+        date order_date
+        date due_date
+        text invoice_status
+        text goods_status
+    }
+    ORDER_ITEMS {
+        int id
+        int order_id
+        int item_id
+        numeric quantity
+        numeric price
+    }
+    PRODUCTION_ORDERS {
+        int id
+        int item_id
+        numeric quantity
+        text status
+        date planned_date
+    }
+    BOM_LINES {
+        int id
+        int product_id
+        int material_id
+        numeric qty_per_unit
+    }
+```
+
+Agreed names used everywhere (database, API and frontend):
+
+| What | Agreed names |
+| --- | --- |
+| Tables | `users`, `roles`, `items`, `stock_history`, `orders`, `order_items`, `production_orders`, `bom_lines` |
+| Item types | `RAW`, `FINISHED` |
+| Order types | `SALES`, `PURCHASE` |
+| Invoice status | Pending, Created |
+| Goods status | Not Dispatched, Partially Dispatched, Dispatched |
+| Production status | PLANNED, PENDING, WIP, IN-TESTING, COMPLETED (one step at a time, forward only) |
+| Stock change types | Opening Stock, Manual Adjustment, Sales Dispatch, Purchase Inward, Production Consumption, Production Output |
+| JSON field style | snake_case, same as the database columns (for example `low_stock_limit`, `goods_status`) |
+
+## 7. Key business rules
+
+1. **Every stock change is recorded.** Changing a quantity always writes a row in `stock_history` with the reason and who did it. Stock can never go below zero.
+2. **Orders can be dispatched in parts.** A sales order can be partly dispatched several times. Stock goes down by the quantity dispatched each time, and the goods status moves from Not Dispatched to Partially Dispatched to Dispatched. Purchase orders work the same way for goods received, and stock goes up.
+3. **Invoices have two states.** An order starts as Pending and becomes Created when the invoice is created.
+4. **Production moves forward one step at a time.** PLANNED, then PENDING, then WIP, then IN-TESTING, then COMPLETED. It cannot skip or go back.
+5. **Completing production updates stock in one step.** When an order becomes COMPLETED, the raw materials listed in the recipe (`bom_lines`) are used up and the finished goods are added to stock. This happens inside one database transaction, so it either fully succeeds or does nothing.
+6. **Low stock.** An item is low when its quantity is below its `low_stock_limit`. It appears in the low-stock list and on the dashboard.
+7. **Late orders.** An order is late when its due date has passed and its goods are not fully dispatched.
+
+## 8. Main flow of the business
+
+```mermaid
+flowchart LR
+    P["Purchase order<br/>raw material"] -->|goods received| RAW["Raw material stock"]
+    RAW -->|used when COMPLETED| PR["Production order"]
+    PR -->|output added| FIN["Finished goods stock"]
+    FIN -->|goods dispatched| S["Sales order"]
+    S --> INV["Invoice"]
+```
+
+## 9. Deployment
+
+| Part | Where | Notes |
+| --- | --- | --- |
+| Database | Neon | Run `database/schema.sql`, then `database/seed.sql` once |
+| Backend | Render | Set `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL` as environment variables |
+| Frontend | Vercel | Set `VITE_API_URL` to the Render address followed by `/api`, then redeploy |
+
+Things to remember:
+
+- `FRONTEND_URL` on Render must be the exact Vercel address, with no slash at the end. This is how the backend decides which website may call it (CORS).
+- Vite reads `VITE_API_URL` when the frontend is built, so after changing it the frontend must be redeployed.
+- The free Render plan puts the backend to sleep when it is idle. The first request after a pause can take up to a minute. Open the live app a few minutes before a demo.
+- A `vercel.json` file with a rewrite to `index.html` makes page refreshes work on any route.
