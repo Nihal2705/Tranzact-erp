@@ -9,11 +9,19 @@ import { errorMessage } from "../modules/orders/orderUtils";
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (n) => Number(n || 0).toLocaleString("en-IN");
 
-function Info({ label, children }) {
+const ico = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+const DocIcon = () => <svg {...ico}><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></svg>;
+const TruckIcon = () => <svg {...ico}><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7" /><circle cx="7" cy="18" r="1.6" /><circle cx="17" cy="18" r="1.6" /></svg>;
+const ClockIcon = () => <svg {...ico}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+
+function Stat({ icon, tone, label, children }) {
   return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-1 text-base text-gray-900">{children}</div>
+    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg font-bold ${tone}`}>{icon}</div>
+      <div className="min-w-0">
+        <div className="text-xs text-slate-500">{label}</div>
+        <div className="mt-0.5">{children}</div>
+      </div>
     </div>
   );
 }
@@ -44,28 +52,27 @@ export default function OrderDetailsPage() {
     catch (err) { setError(errorMessage(err)); }
     finally { setLoading(false); }
   };
-
   const loadTimeline = async () => {
     setTimelineLoading(true); setTimelineError("");
     try { setEvents(await fetchTimeline(id)); }
     catch (err) { setTimelineError(errorMessage(err)); }
     finally { setTimelineLoading(false); }
   };
-
   useEffect(() => { if (!blocked) { load(); loadTimeline(); } }, [id]);
 
   if (blocked) return <p className="text-red-600">You do not have permission to view orders.</p>;
-  if (loading) return <p className="text-gray-500">Loading order…</p>;
-  if (error) return <p className="text-red-600">{error} <button onClick={load} className="ml-2 rounded border px-2 py-1 text-xs text-gray-700">Retry</button></p>;
-  if (!order) return <p>Order not found. <Link className="text-blue-600" to="/orders">Back to orders</Link></p>;
+  if (loading) return <p className="text-slate-500">Loading order…</p>;
+  if (error) return <p className="text-red-600">{error} <button onClick={load} className="ml-2 rounded-xl border border-slate-300 px-3 py-1 text-sm text-slate-700">Retry</button></p>;
+  if (!order) return <p>Order not found. <Link className="text-teal-600" to="/orders">Back to orders</Link></p>;
 
   const isSales = order.order_type === "SALES";
   const verb = isSales ? "Dispatch" : "Receive";
   const direction = isSales ? "down" : "up";
   const lines = order.lines || [];
-  const toSend = lines.filter((l) => Number(qty[l.id]) > 0);
-  const isLate = order.due_date && order.due_date < today() && order.goods_status !== "Dispatched";
   const remainingOf = (l) => Number(l.quantity) - Number(l.fulfilled_qty);
+  const toSend = lines.filter((l) => Number(qty[l.id]) > 0);
+  const late = order.due_date && order.due_date < today() && order.goods_status !== "Dispatched";
+  const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 3000); };
 
   const openConfirm = (kind) => {
     if (!requestId) setRequestId(crypto.randomUUID());
@@ -93,8 +100,7 @@ export default function OrderDetailsPage() {
       setOrder(data);
       loadTimeline();
       setQty({}); setRequestId(""); setConfirm(null);
-      setToast(payload.invoice_status ? "Invoice created" : `Goods ${isSales ? "dispatched" : "received"}`);
-      setTimeout(() => setToast(""), 3000);
+      flash(payload.invoice_status ? "Invoice created" : `Goods ${isSales ? "dispatched" : "received"}`);
     } catch (err) {
       setConfirm(null);
       if (err.response?.status === 401) return navigate("/login");
@@ -102,99 +108,87 @@ export default function OrderDetailsPage() {
     } finally { setBusy(false); }
   };
 
-  return (
-    <div className="space-y-5">
-      {toast && <div className="fixed right-4 top-4 z-50 rounded bg-green-600 px-4 py-2 text-sm text-white shadow">{toast}</div>}
+  const th = "px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500";
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav className="text-sm text-gray-500">
-          <Link to="/orders" className="text-blue-600 hover:underline">Orders</Link>
-          <span className="mx-2">/</span>
-          <span className="text-gray-700">Order #{order.id}</span>
-        </nav>
+  return (
+    <div className="space-y-6">
+      {toast && <div className="fixed right-5 top-5 z-50 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Link to="/orders" className="text-sm font-medium text-teal-600 hover:text-teal-800">← Back to orders</Link>
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">Order #{order.id} · {order.party_name}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {isSales ? "Sales" : "Purchase"} order · placed {order.order_date} · due {order.due_date || "—"}
+          </p>
+        </div>
         <div className="flex gap-2">
           <button disabled={order.invoice_status === "Created"} onClick={() => openConfirm("invoice")}
-            className="rounded-lg bg-blue-800 px-4 py-2 text-sm font-medium text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-40">
-            Create Invoice
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+            {order.invoice_status === "Created" ? "Invoice created" : "Create invoice"}
           </button>
           <button disabled={order.goods_status === "Dispatched"} onClick={askDispatch}
-            className="rounded-lg border border-blue-800 bg-white px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40">
-            {verb} Goods
+            className="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {verb} goods
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-bold text-gray-900">Order #{order.id}</h1>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Invoice</span><StatusBadge status={order.invoice_status} />
-          <span className="ml-2 text-xs text-gray-500">Goods</span><StatusBadge status={order.goods_status} />
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat icon="₹" tone="bg-teal-100 text-teal-700" label="Order total">
+          <div className="text-2xl font-bold text-slate-900">₹{money(order.total_amount)}</div>
+        </Stat>
+        <Stat icon={<DocIcon />} tone="bg-blue-100 text-blue-700" label="Invoice"><StatusBadge status={order.invoice_status} /></Stat>
+        <Stat icon={<TruckIcon />} tone="bg-amber-100 text-amber-700" label="Goods"><StatusBadge status={order.goods_status} /></Stat>
+        <Stat icon={<ClockIcon />} tone="bg-red-100 text-red-600" label="Due date">
+          <div className={`text-2xl font-bold ${late ? "text-red-600" : "text-slate-900"}`}>{order.due_date || "—"}</div>
+        </Stat>
       </div>
 
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-5">
-          <Info label={isSales ? "Customer" : "Supplier"}>{order.party_name}</Info>
-          <Info label="Order Type">{isSales ? "Sales" : "Purchase"}</Info>
-          <Info label="Order Date">{order.order_date}</Info>
-          <Info label="Due Date">
-            <span className={isLate ? "font-semibold text-red-600" : ""}>
-              {order.due_date || "—"}{isLate && " (late)"}
-            </span>
-          </Info>
-          <Info label="Order Total">₹{money(order.total_amount)}</Info>
-        </div>
-      </div>
-
-      {formError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{formError}</div>}
+      {formError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{formError}</div>}
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="rounded-xl border bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b px-5 py-3">
-              <h2 className="text-lg font-semibold text-gray-900">Items</h2>
-              <span className="text-sm text-gray-500">{lines.length} {lines.length === 1 ? "item" : "items"}</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-blue-50 text-left text-blue-800">
-                  <tr>
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-4 py-3">Ordered</th>
-                    <th className="px-4 py-3">{isSales ? "Dispatched" : "Received"} so far</th>
-                    <th className="px-4 py-3">Remaining</th>
-                    <th className="px-4 py-3">{verb} now</th>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
+          <div className="px-5 py-4"><h2 className="text-lg font-semibold text-slate-900">Order lines</h2></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead className="bg-slate-50 text-left">
+                <tr>
+                  <th className={th}>Item</th>
+                  <th className={`${th} text-right`}>Ordered</th>
+                  <th className={`${th} text-right`}>{isSales ? "Dispatched" : "Received"}</th>
+                  <th className={`${th} text-right`}>Remaining</th>
+                  <th className={`${th} text-right`}>{verb} now</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l.id} className="border-t border-slate-100">
+                    <td className="px-5 py-4 font-semibold text-slate-900">{l.item_name}</td>
+                    <td className="px-5 py-4 text-right">{Number(l.quantity)}</td>
+                    <td className="px-5 py-4 text-right">{Number(l.fulfilled_qty)}</td>
+                    <td className="px-5 py-4 text-right">{remainingOf(l)}</td>
+                    <td className="px-5 py-4 text-right">
+                      {remainingOf(l) <= 0 ? (
+                        <span className="text-slate-400">Done</span>
+                      ) : (
+                        <input type="number" min="0" placeholder="0" value={qty[l.id] || ""}
+                          onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })}
+                          className="h-10 w-24 rounded-xl border border-slate-300 px-3 text-right text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30" />
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {lines.map((l) => (
-                    <tr key={l.id} className="border-t">
-                      <td className="px-4 py-3 font-medium text-gray-900">{l.item_name}</td>
-                      <td className="px-4 py-3">{Number(l.quantity)}</td>
-                      <td className="px-4 py-3">{Number(l.fulfilled_qty)}</td>
-                      <td className="px-4 py-3">{remainingOf(l)}</td>
-                      <td className="px-4 py-3">
-                        <input type="number" min="0" placeholder="0"
-                          className="w-24 rounded-lg border p-2 text-sm disabled:bg-gray-100"
-                          value={qty[l.id] || ""} disabled={remainingOf(l) <= 0}
-                          onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center justify-between border-t bg-gray-50 px-5 py-3 text-sm">
-              <span className="text-gray-500">{lines.length} {lines.length === 1 ? "line" : "lines"}</span>
-              <span className="text-base font-semibold text-gray-900">Order total: ₹{money(order.total_amount)}</span>
-            </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
+            You can {verb.toLowerCase()} part of an order. Stock goes {direction} by the quantity you {verb.toLowerCase()}.
           </div>
         </div>
 
-        <div>
-          <OrderTimeline events={events} total={order.total_amount} isSales={isSales}
-            loading={timelineLoading} error={timelineError} onRetry={loadTimeline} />
-        </div>
+        <OrderTimeline events={events} total={order.total_amount} isSales={isSales}
+          loading={timelineLoading} error={timelineError} onRetry={loadTimeline} />
       </div>
 
       <Modal open={confirm === "invoice"} title="Create invoice?" message="The invoice status will change to Created."
