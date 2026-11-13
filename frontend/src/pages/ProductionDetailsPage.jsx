@@ -5,17 +5,6 @@ import Modal from "../components/Modal";
 import { fetchProductionOrder, updateProductionStatus } from "../modules/production/sampleProduction";
 import { STAGES, fmtMoney, errorMessage } from "../modules/production/productionUtils";
 
-// One small label + value pair
-function Fact({ label, children, note }) {
-  return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1.5 text-xl font-semibold text-slate-900">{children}</dd>
-      {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}
-    </div>
-  );
-}
-
 export default function ProductionDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -33,7 +22,7 @@ export default function ProductionDetailsPage() {
   const load = async () => {
     setLoading(true); setError("");
     try {
-      const data = await fetchProductionOrder(id);   
+      const data = await fetchProductionOrder(id);
       setP(data); setQtyInput(String(data?.completed_qty ?? 0));
     } catch (err) { setError(errorMessage(err)); }
     finally { setLoading(false); }
@@ -41,17 +30,9 @@ export default function ProductionDetailsPage() {
   useEffect(() => { load(); }, [id]);
 
   if (loading) return <p className="text-slate-500">Loading production order…</p>;
-  if (error) return <p className="text-red-600">{error} <button onClick={load} className="ml-2 rounded-lg border border-slate-300 px-3 py-1 text-sm text-slate-700">Retry</button></p>;
-  if (!p) {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <p className="text-slate-700">Production order not found.</p>
-        <Link to="/production" className="mt-3 inline-block text-blue-600">← Back to production</Link>
-      </div>
-    );
-  }
+  if (error) return <p className="text-red-600">{error} <button onClick={load} className="ml-2 rounded-xl border border-slate-300 px-3 py-1 text-sm text-slate-700">Retry</button></p>;
+  if (!p) return <p>Production order not found. <Link className="text-teal-600" to="/production">Back to production</Link></p>;
 
-  // ---- calculations ----
   const idx = STAGES.indexOf(p.status);
   const next = STAGES[idx + 1];
   const done = p.status === "COMPLETED";
@@ -59,28 +40,32 @@ export default function ProductionDetailsPage() {
 
   const target = Number(p.target_qty) || 0;
   const completed = Number(p.completed_qty) || 0;
-  const remaining = Math.max(0, target - completed);
   const progress = target > 0 ? Math.min(100, Math.round((completed / target) * 100)) : 0;
+  const unit = p.finished_unit || "pcs";
 
-  const materials = p.materials.map((m) => ({ ...m, shortage: Math.max(0, Number(m.qty_needed) - Number(m.qty_in_stock)) }));
-  const unavailable = materials.filter((m) => m.shortage > 0);
+  const materials = (p.materials || []).map((m) => {
+    const needed = Number(m.qty_needed) || 0;
+    const stock = Number(m.qty_in_stock) || 0;
+    const cost = Number(m.unit_cost) || 0;
+    return { ...m, needed, stock, cost, short: Math.max(0, needed - stock), perUnit: m.qty_per_unit ?? (target ? needed / target : 0) };
+  });
+  const unavailable = materials.filter((m) => m.short > 0);
+  const totalCost = done ? Number(p.total_cost) || 0 : materials.reduce((s, m) => s + m.needed * m.cost, 0);
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 3000); };
   const handleError = (err) => {
     if (err.response?.status === 401) return navigate("/login");
-    setFormError(errorMessage(err));            // screen keeps the old numbers
+    setFormError(errorMessage(err));
   };
-  const openConfirm = () => {                   // one request_id per action; same id if the user retries
+  const openConfirm = () => {
     if (!requestId) setRequestId(crypto.randomUUID());
     setFormError("");
     setConfirm(true);
   };
 
- 
   const move = async () => {
     setBusy(true); setFormError("");
     try {
-      // REAL: const { data } = await api.put(`/production/${id}/status`, { status: next, request_id: requestId });
       const data = await updateProductionStatus(id, { status: next, request_id: requestId });
       setP(data); setQtyInput(String(data.completed_qty));
       setConfirm(false); setRequestId("");
@@ -89,7 +74,6 @@ export default function ProductionDetailsPage() {
     finally { setBusy(false); }
   };
 
-  
   const updateProgress = async () => {
     setFormError("");
     const n = Number(qtyInput);
@@ -105,155 +89,122 @@ export default function ProductionDetailsPage() {
     finally { setBusy(false); }
   };
 
-  const th = "px-6 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500";
+  const th = "px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500";
 
   return (
     <div className="space-y-6">
-      {toast && <div className="fixed right-4 top-4 z-50 rounded-lg bg-green-600 px-5 py-3 text-sm font-medium text-white shadow-lg">{toast}</div>}
+      {toast && <div className="fixed right-5 top-5 z-50 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}
 
-      {/* 1. HEADER */}
-      <div>
-        <Link to="/production" className="text-sm font-medium text-blue-800 hover:text-blue-900">← Back to production</Link>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight text-slate-900">{p.finished_item_name}</h1>
-              <StatusBadge status={p.status} />
-            </div>
-            <p className="mt-1.5 text-slate-500">Production Order #{p.id} · Planned {p.planned_date}</p>
-          </div>
-          {next ? (
-            <button onClick={openConfirm}
-              className="rounded-lg bg-blue-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-900">
-              Move to {next} →
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Link to="/production" className="text-sm font-medium text-teal-600 hover:text-teal-800">← Back to production</Link>
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">Production order #{p.id} · {p.finished_item_name} ×{target}</h1>
+          <p className="mt-1 text-sm text-slate-500">Planned date {p.planned_date}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <StatusBadge status={p.status} />
+          {next && (
+            <button onClick={openConfirm} className="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
+              Move to {next}
             </button>
-          ) : (
-            <span className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-700">✓ Completed</span>
           )}
         </div>
       </div>
 
-      {formError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{formError}</div>}
+      {formError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{formError}</div>}
 
-      {/* 2. OVERVIEW: stages + facts + progress */}
-      <section className="rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-slate-900">Production overview</h2>
-          <p className="mt-0.5 text-sm text-slate-500">Moves forward only, one stage at a time.</p>
+      {/* Stages */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Stages (one step at a time, forward only)</h2>
+
+        <div className="mt-5 grid grid-cols-5">
+          {STAGES.map((s, i) => {
+            const reached = i <= idx;
+            return (
+              <div key={s} className="flex flex-col items-center gap-2">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${reached ? "bg-teal-600 text-white" : "bg-slate-200 text-slate-500"} ${i === idx && !done ? "ring-4 ring-teal-100" : ""}`}>
+                  {reached && (i < idx || done) ? "✓" : i + 1}
+                </div>
+                <span className={`text-[11px] uppercase tracking-wide ${i === idx ? "font-bold text-slate-900" : "text-slate-500"}`}>{s}</span>
+              </div>
+            );
+          })}
         </div>
 
-        <div className="space-y-7 px-6 py-6">
-          {/* stage tracker (exact status words) */}
-          <div className="flex items-center">
-            {STAGES.map((stage, i) => {
-              const finished = i < idx || (i === idx && done);
-              const current = i === idx && !done;
-              return (
-                <div key={stage} className="flex flex-1 items-center last:flex-none">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold
-                      ${finished ? "bg-blue-800 text-white" : current ? "bg-blue-800 text-white ring-4 ring-blue-100" : "bg-slate-100 text-slate-400"}`}>
-                      {finished ? "✓" : i + 1}
-                    </div>
-                    <span className={`text-xs font-medium ${current ? "text-blue-800" : finished ? "text-slate-700" : "text-slate-400"}`}>{stage}</span>
-                  </div>
-                  {i !== STAGES.length - 1 && <div className={`mx-2 mb-6 h-0.5 flex-1 ${i < idx ? "bg-blue-800" : "bg-slate-200"}`} />}
-                </div>
-              );
-            })}
+        <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: `${progress}%` }} />
+        </div>
+        <div className="mt-2 text-sm text-slate-500">Progress {progress}% · {completed} of {target} {unit}</div>
+
+        {canTrack && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm">
+            <span className="font-medium text-slate-700">Update completed quantity:</span>
+            <input type="number" min="0" value={qtyInput} onChange={(e) => setQtyInput(e.target.value)}
+              className="h-10 w-24 rounded-xl border border-slate-300 px-3 text-right focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30" />
+            <span className="text-slate-500">of {target}</span>
+            <button onClick={updateProgress} disabled={busy}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+              {busy ? "Saving…" : "Update"}
+            </button>
           </div>
+        )}
+      </div>
 
-          {/* facts */}
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-6 border-t border-slate-100 pt-6 md:grid-cols-3">
-            <Fact label="Target quantity">{target} <span className="text-sm font-normal text-slate-500">{p.finished_unit}</span></Fact>
-            <Fact label="Completed">{completed} <span className="text-sm font-normal text-slate-500">{p.finished_unit}</span></Fact>
-            <Fact label="Remaining">{remaining} <span className="text-sm font-normal text-slate-500">{p.finished_unit}</span></Fact>
-            <Fact label="Finished goods produced"
-              note={done ? "Added to stock on completion" : `Will add ${target} ${p.finished_unit} to stock on completion`}>
-              {done ? `${target} ${p.finished_unit}` : "—"}
-            </Fact>
-            <Fact label={done ? "Total cost" : "Estimated cost"}
-              note={done ? `Total cost for ${target} ${p.finished_unit}` : "From current raw material prices"}>
-              {done ? fmtMoney(p.total_cost) : `~${fmtMoney(p.est_cost)}`}
-            </Fact>
-            <Fact label="Planned date">{p.planned_date}</Fact>
-          </dl>
-
-          {/* progress */}
-          <div>
-            <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="font-medium text-slate-700">Progress</span>
-              <span className="font-semibold text-slate-900">{progress}%</span>
-            </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full rounded-full bg-blue-800 transition-all" style={{ width: `${progress}%` }} />
-            </div>
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Raw materials */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
+          <div className="px-5 py-4"><h2 className="text-lg font-semibold text-slate-900">Raw materials {done ? "used" : "needed"}</h2></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead className="bg-slate-50 text-left">
+                <tr>
+                  <th className={th}>Material</th>
+                  <th className={`${th} text-right`}>Per unit</th>
+                  <th className={`${th} text-right`}>Total {done ? "used" : "needed"}</th>
+                  {!done && <th className={`${th} text-right`}>In stock</th>}
+                  <th className={`${th} text-right`}>Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {materials.map((m) => (
+                  <tr key={m.raw_item_id} className="border-t border-slate-100">
+                    <td className="px-5 py-3.5 font-medium text-slate-900">{m.raw_item_name}</td>
+                    <td className="px-5 py-3.5 text-right">{m.perUnit} {m.unit}</td>
+                    <td className="px-5 py-3.5 text-right">{m.needed} {m.unit}</td>
+                    {!done && <td className={`px-5 py-3.5 text-right ${m.short > 0 ? "font-bold text-red-600" : ""}`}>{m.stock} {m.unit}</td>}
+                    <td className="px-5 py-3.5 text-right">{fmtMoney(m.needed * m.cost)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-900">
+                  <td className="px-5 py-3.5" colSpan={done ? 3 : 4}>Total material cost{!done && " (estimated)"}</td>
+                  <td className="px-5 py-3.5 text-right">{fmtMoney(totalCost)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-
-          {/* update completed qty (WIP / IN-TESTING only) */}
-          {canTrack && (
-            <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-6 text-sm">
-              <span className="font-medium text-slate-700">Update completed quantity:</span>
-              <input type="number" min="0" value={qtyInput} onChange={(e) => setQtyInput(e.target.value)}
-                className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-right focus:border-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-800/30" />
-              <span className="text-slate-500">of {target}</span>
-              <button onClick={updateProgress} disabled={busy}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
-                {busy ? "Saving…" : "Update"}
-              </button>
+          {!done && unavailable.length > 0 && (
+            <div className="border-t border-red-100 bg-red-50 px-5 py-3 text-xs font-medium text-red-700">
+              Shortage: {unavailable.map((m) => `${m.raw_item_name} (${m.short} ${m.unit})`).join(", ")}.
+              Completing this order will be refused until stock is added.
             </div>
           )}
         </div>
-      </section>
 
-      {/* 3. RAW MATERIALS */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-slate-900">Raw materials</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {done ? "Materials used for this production order." : "Materials needed for this production order, compared with stock."}
+        {/* Output */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Output when completed</h2>
+          <div className="mt-4 flex items-center gap-4 rounded-2xl border border-slate-200 p-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-100 text-xl text-green-700">▣</div>
+            <div>
+              <div className="text-xs text-slate-500">{p.finished_item_name} {done ? "added to stock" : "will be added to stock"}</div>
+              <div className="text-2xl font-bold text-slate-900">+{target} {unit}</div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            Raw materials are removed from stock and finished goods are added only when the order is COMPLETED.
           </p>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className={th}>Material</th>
-                <th className={`${th} text-right`}>Required</th>
-                <th className={`${th} text-right`}>{done ? "Stock now" : "In stock"}</th>
-                <th className={th}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {materials.map((m) => {
-                const short = !done && m.shortage > 0;
-                return (
-                  <tr key={m.raw_item_id}>
-                    <td className="px-6 py-4 font-medium text-slate-900">{m.raw_item_name}</td>
-                    <td className="px-6 py-4 text-right text-slate-700">{m.qty_needed} {m.unit}</td>
-                    <td className={`px-6 py-4 text-right ${short ? "font-semibold text-red-600" : "text-slate-700"}`}>{m.qty_in_stock} {m.unit}</td>
-                    <td className="px-6 py-4">
-                      {done ? <span className="text-slate-500">Used</span>
-                        : short ? <span className="font-medium text-red-600">Short by {m.shortage} {m.unit}</span>
-                        : <span className="font-medium text-green-700">Available</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border-t border-slate-200 bg-slate-50 px-6 py-3 text-sm">
-          {done ? <span className="text-slate-500">Raw materials were deducted from stock when this order was completed.</span>
-            : unavailable.length === 0 ? <span className="text-slate-500">All required materials are in stock.</span>
-            : <span className="font-medium text-red-700">
-                Shortage: {unavailable.map((m) => `${m.raw_item_name} (${m.shortage} ${m.unit})`).join(", ")}.
-                Completing this order will be refused until stock is added.
-              </span>}
-        </div>
-      </section>
+      </div>
 
       <Modal open={confirm} title={`Move to ${next}?`} busy={busy} onClose={() => setConfirm(false)} onConfirm={move}
         message={next === "COMPLETED"
