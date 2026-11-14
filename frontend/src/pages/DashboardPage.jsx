@@ -202,10 +202,10 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-teal-100 bg-teal-50 px-5 py-3 text-sm text-teal-800">
-        <CircleCheck size={18} />
-        <span><b>System running smoothly!</b> All modules are up to date.</span>
-      </div>
+     
+        
+        
+      
     </div>
   );
 }
