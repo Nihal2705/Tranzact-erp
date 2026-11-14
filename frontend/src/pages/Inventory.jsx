@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
+import Drawer from "../components/Drawer";
 
 function Inventory() {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const canCreate = user.role !== "Worker";
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
 
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState("name");
@@ -34,7 +39,7 @@ function Inventory() {
   const [formData, setFormData] = useState({
     name: "",
     item_type: "RAW",
-    unit: "pcs",
+    unit: "",
     quantity: "",
     price: "",
     low_stock_limit: "",
@@ -188,7 +193,7 @@ function Inventory() {
     setFormData({
       name: "",
       item_type: "RAW",
-      unit: "pcs",
+      unit: "",
       quantity: "",
       price: "",
       low_stock_limit: "",
@@ -254,17 +259,11 @@ function Inventory() {
   // ADD ITEM
   // -----------------------------
   const handleAddItem = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
-    const openingQuantity = Number(
-      formData.quantity
-    );
-
+    const openingQuantity = formData.quantity === "" ? 0 : Number(formData.quantity);
     const price = Number(formData.price);
-
-    const lowStockLimit = Number(
-      formData.low_stock_limit
-    );
+    const lowStockLimit = formData.low_stock_limit === "" ? 0 : Number(formData.low_stock_limit);
 
     // Basic validation
     if (!formData.name.trim()) {
@@ -277,36 +276,18 @@ function Inventory() {
       return;
     }
 
-    if (
-      formData.quantity === "" ||
-      Number.isNaN(openingQuantity) ||
-      openingQuantity < 0
-    ) {
-      setError(
-        "Opening quantity must be 0 or greater."
-      );
+    if (Number.isNaN(openingQuantity) || openingQuantity < 0) {
+      setError("Opening quantity must be 0 or greater.");
       return;
     }
 
-    if (
-      formData.price === "" ||
-      Number.isNaN(price) ||
-      price < 0
-    ) {
-      setError(
-        "Unit price must be 0 or greater."
-      );
+    if (formData.price === "" || Number.isNaN(price) || price < 0) {
+      setError("Unit price must be 0 or greater.");
       return;
     }
 
-    if (
-      formData.low_stock_limit === "" ||
-      Number.isNaN(lowStockLimit) ||
-      lowStockLimit < 0
-    ) {
-      setError(
-        "Low stock limit must be 0 or greater."
-      );
+    if (Number.isNaN(lowStockLimit) || lowStockLimit < 0) {
+      setError("Low stock limit must be 0 or greater.");
       return;
     }
 
@@ -314,8 +295,6 @@ function Inventory() {
       setSaving(true);
       setError("");
 
-      // IMPORTANT:
-      // Backend expects opening_qty, NOT quantity.
       const payload = {
         name: formData.name.trim(),
         item_type: formData.item_type,
@@ -325,26 +304,20 @@ function Inventory() {
         low_stock_limit: lowStockLimit,
       };
 
-      console.log(
-        "Add Item payload:",
-        payload
-      );
-
-      await api.post(
-        "/api/items",
-        payload
-      );
+      await api.post("/items", payload);
 
       setShowAddForm(false);
       resetForm();
+      setToast("Item added successfully");
+      setTimeout(() => setToast(""), 3000);
 
       await fetchItems();
     } catch (err) {
       console.error(err);
 
       setError(
-        err.response?.data?.message ||
-          err.response?.data?.error ||
+        err.response?.data?.error ||
+          err.response?.data?.message ||
           "Failed to add inventory item."
       );
     } finally {
@@ -356,7 +329,29 @@ function Inventory() {
   // EDIT ITEM
   // -----------------------------
   const handleEditItem = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+
+    if (!formData.name.trim()) {
+      setError("Item name is required.");
+      return;
+    }
+
+    if (!formData.unit.trim()) {
+      setError("Unit of measure is required.");
+      return;
+    }
+
+    const price = Number(formData.price);
+    if (formData.price === "" || Number.isNaN(price) || price < 0) {
+      setError("Unit price must be 0 or greater.");
+      return;
+    }
+
+    const lowStockLimit = formData.low_stock_limit === "" ? 0 : Number(formData.low_stock_limit);
+    if (Number.isNaN(lowStockLimit) || lowStockLimit < 0) {
+      setError("Low stock limit must be 0 or greater.");
+      return;
+    }
 
     try {
       setSaving(true);
@@ -369,26 +364,27 @@ function Inventory() {
         name: formData.name.trim(),
         item_type: formData.item_type,
         unit: formData.unit.trim(),
-        price: Number(formData.price),
-        low_stock_limit:
-          Number(formData.low_stock_limit),
+        price: price,
+        low_stock_limit: lowStockLimit,
       };
 
       await api.put(
-        `/api/items/${editingItemId}`,
+        `/items/${editingItemId}`,
         payload
       );
 
       setShowEditForm(false);
       resetForm();
+      setToast("Item updated successfully");
+      setTimeout(() => setToast(""), 3000);
 
       await fetchItems();
     } catch (err) {
       console.error(err);
 
       setError(
-        err.response?.data?.message ||
-          err.response?.data?.error ||
+        err.response?.data?.error ||
+          err.response?.data?.message ||
           "Failed to update inventory item."
       );
     } finally {
@@ -514,6 +510,9 @@ function Inventory() {
       setStockChange("");
       setStockReason("");
 
+      setToast("Stock updated successfully");
+      setTimeout(() => setToast(""), 3000);
+
       setError("");
     } catch (err) {
       console.error(err);
@@ -595,28 +594,34 @@ function Inventory() {
   };
 
   return (
-    <div className="p-6">
+    <div className="space-y-6">
+      {toast && (
+        <div className="fixed right-5 top-5 z-50 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+          {toast}
+        </div>
+      )}
+
       {/* HEADER */}
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-slate-900">
             Inventory
           </h1>
 
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-slate-500">
             Manage inventory items and stock.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={
-            handleOpenAddForm
-          }
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          + Add Item
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={handleOpenAddForm}
+            className="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"
+          >
+            + Add item
+          </button>
+        )}
       </div>
 
       {/* SUMMARY */}
@@ -657,7 +662,7 @@ function Inventory() {
             );
             setCurrentPage(1);
           }}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 md:max-w-md"
+          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-500/30 md:max-w-md"
         />
       </div>
 
@@ -839,17 +844,19 @@ function Inventory() {
                       {/* ACTIONS */}
                       <td className="px-4 py-3 text-sm">
                         <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleOpenEditForm(
-                                item
-                              )
-                            }
-                            className="rounded-md bg-yellow-500 px-3 py-1 text-xs font-medium text-white hover:bg-yellow-600"
-                          >
-                            Edit
-                          </button>
+                          {canCreate && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleOpenEditForm(
+                                  item
+                                )
+                              }
+                              className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+                            >
+                              Edit
+                            </button>
+                          )}
 
                           <button
                             type="button"
@@ -858,7 +865,7 @@ function Inventory() {
                                 item
                               )
                             }
-                            className="rounded-md bg-blue-500 px-3 py-1 text-xs font-medium text-white hover:bg-blue-600"
+                            className="rounded-lg bg-teal-600 px-3 py-1 text-xs font-semibold text-white hover:bg-teal-700"
                           >
                             Stock
                           </button>
@@ -870,7 +877,7 @@ function Inventory() {
                                 item
                               )
                             }
-                            className="rounded-md bg-gray-600 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700"
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                           >
                             History
                           </button>
@@ -885,57 +892,29 @@ function Inventory() {
 
           {/* PAGINATION */}
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Page{" "}
-              {
-                currentPage
-              }{" "}
-              of{" "}
-              {
-                totalPages ||
-                  1
-              }
+            <p className="text-sm text-slate-500">
+              Page {currentPage} of {totalPages || 1}
             </p>
 
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={
-                  currentPage ===
-                  1
-                }
+                disabled={currentPage === 1}
                 onClick={() =>
-                  setCurrentPage(
-                    (prev) =>
-                      Math.max(
-                        prev -
-                          1,
-                        1
-                      )
-                  )
+                  setCurrentPage((prev) => Math.max(prev - 1, 1))
                 }
-                className="rounded-md border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Previous
               </button>
 
               <button
                 type="button"
-                disabled={
-                  currentPage >=
-                  totalPages
-                }
+                disabled={currentPage >= totalPages}
                 onClick={() =>
-                  setCurrentPage(
-                    (prev) =>
-                      Math.min(
-                        prev +
-                          1,
-                        totalPages
-                      )
-                  )
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                 }
-                className="rounded-md border px-3 py-1 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>
@@ -944,560 +923,351 @@ function Inventory() {
         </>
       )}
 
-      {/* ADD ITEM MODAL */}
-      {showAddForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">
-                Add Item
-              </h2>
+      {/* ADD ITEM DRAWER */}
+      <Drawer
+        open={showAddForm}
+        title="Add new item"
+        subtitle="Add a raw material or finished product to inventory."
+        onClose={handleCloseAddForm}
+        onConfirm={handleAddItem}
+        confirmText="Add item"
+        busy={saving}
+      >
+        <form onSubmit={handleAddItem} className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-              <button
-                type="button"
-                onClick={
-                  handleCloseAddForm
-                }
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Item name *
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleFormChange}
+              required
+              placeholder="e.g. Copper Pipe"
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Item type *
+            </label>
+            <select
+              name="item_type"
+              value={formData.item_type}
+              onChange={handleFormChange}
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+            >
+              <option value="RAW">RAW (Raw Material)</option>
+              <option value="FINISHED">FINISHED (Finished Good)</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Unit of measure *
+              </label>
+              <input
+                type="text"
+                name="unit"
+                value={formData.unit}
+                onChange={handleFormChange}
+                required
+                placeholder="e.g. pcs, kg, mtr"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              />
             </div>
 
-            <form
-              onSubmit={
-                handleAddItem
-              }
-            >
-              <div className="space-y-4">
-                {/* NAME */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Name
-                  </label>
-
-                  <input
-                    type="text"
-                    name="name"
-                    value={
-                      formData.name
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-
-                {/* TYPE */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Type
-                  </label>
-
-                  <select
-                    name="item_type"
-                    value={
-                      formData.item_type
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  >
-                    <option value="RAW">
-                      RAW
-                    </option>
-
-                    <option value="FINISHED">
-                      FINISHED
-                    </option>
-
-                    <option value="PACKAGING">
-                      PACKAGING
-                    </option>
-                  </select>
-                </div>
-
-                {/* UNIT */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Unit
-                  </label>
-
-                  <input
-                    type="text"
-                    name="unit"
-                    value={
-                      formData.unit
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-
-                {/* OPENING QUANTITY */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Opening Quantity
-                  </label>
-
-                  <input
-                    type="number"
-                    name="quantity"
-                    value={
-                      formData.quantity
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    min="0"
-                    step="1"
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    This quantity is saved as opening stock.
-                  </p>
-                </div>
-
-                {/* PRICE */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Unit Price
-                  </label>
-
-                  <input
-                    type="number"
-                    name="price"
-                    value={
-                      formData.price
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    min="0"
-                    step="0.01"
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-
-                {/* LOW STOCK LIMIT */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Low Stock Limit
-                  </label>
-
-                  <input
-                    type="number"
-                    name="low_stock_limit"
-                    value={
-                      formData.low_stock_limit
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    min="0"
-                    step="1"
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={
-                    handleCloseAddForm
-                  }
-                  disabled={
-                    saving
-                  }
-                  className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={
-                    saving
-                  }
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {saving
-                    ? "Saving..."
-                    : "Save Item"}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Unit price (₹) *
+              </label>
+              <input
+                type="number"
+                name="price"
+                min="0"
+                step="0.01"
+                value={formData.price}
+                onChange={handleFormChange}
+                required
+                placeholder="0.00"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              />
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* EDIT ITEM MODAL */}
-      {showEditForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">
-                Edit Item
-              </h2>
-
-              <button
-                type="button"
-                onClick={
-                  handleCloseEditForm
-                }
-                className="text-xl text-gray-500 hover:text-gray-700"
-              >
-                ×
-              </button>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Opening quantity
+              </label>
+              <input
+                type="number"
+                name="quantity"
+                min="0"
+                step="1"
+                value={formData.quantity}
+                onChange={handleFormChange}
+                placeholder="0"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Saved as opening stock.
+              </p>
             </div>
 
-            <form
-              onSubmit={
-                handleEditItem
-              }
-            >
-              <div className="space-y-4">
-                {/* NAME */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Name
-                  </label>
-
-                  <input
-                    type="text"
-                    name="name"
-                    value={
-                      formData.name
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-
-                {/* TYPE */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Type
-                  </label>
-
-                  <select
-                    name="item_type"
-                    value={
-                      formData.item_type
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  >
-                    <option value="RAW">
-                      RAW
-                    </option>
-
-                    <option value="FINISHED">
-                      FINISHED
-                    </option>
-
-                    <option value="PACKAGING">
-                      PACKAGING
-                    </option>
-                  </select>
-                </div>
-
-                {/* UNIT */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Unit
-                  </label>
-
-                  <input
-                    type="text"
-                    name="unit"
-                    value={
-                      formData.unit
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-
-                {/* PRICE */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Unit Price
-                  </label>
-
-                  <input
-                    type="number"
-                    name="price"
-                    value={
-                      formData.price
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    min="0"
-                    step="0.01"
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-
-                {/* LOW STOCK LIMIT */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Low Stock Limit
-                  </label>
-
-                  <input
-                    type="number"
-                    name="low_stock_limit"
-                    value={
-                      formData.low_stock_limit
-                    }
-                    onChange={
-                      handleFormChange
-                    }
-                    min="0"
-                    step="1"
-                    required
-                    className="w-full rounded-md border border-gray-300 px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={
-                    handleCloseEditForm
-                  }
-                  disabled={
-                    saving
-                  }
-                  className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={
-                    saving
-                  }
-                  className="rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
-                >
-                  {saving
-                    ? "Updating..."
-                    : "Update Item"}
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Low stock limit
+              </label>
+              <input
+                type="number"
+                name="low_stock_limit"
+                min="0"
+                step="1"
+                value={formData.low_stock_limit}
+                onChange={handleFormChange}
+                placeholder="0"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Warning limit.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        </form>
+      </Drawer>
+
+      {/* EDIT ITEM DRAWER */}
+      <Drawer
+        open={showEditForm}
+        title="Edit item"
+        subtitle="Update item details and stock warning limits."
+        onClose={handleCloseEditForm}
+        onConfirm={handleEditItem}
+        confirmText="Save changes"
+        busy={saving}
+      >
+        <form onSubmit={handleEditItem} className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Item name *
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleFormChange}
+              required
+              placeholder="e.g. Copper Wire 2.5mm"
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Item type *
+            </label>
+            <select
+              name="item_type"
+              value={formData.item_type}
+              onChange={handleFormChange}
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+            >
+              <option value="RAW">RAW</option>
+              <option value="FINISHED">FINISHED</option>
+              <option value="PACKAGING">PACKAGING</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Unit of measure *
+              </label>
+              <input
+                type="text"
+                name="unit"
+                value={formData.unit}
+                onChange={handleFormChange}
+                required
+                placeholder="e.g. pcs, kg, mtr"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Unit price (₹) *
+              </label>
+              <input
+                type="number"
+                name="price"
+                min="0"
+                step="0.01"
+                value={formData.price}
+                onChange={handleFormChange}
+                required
+                placeholder="0.00"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Low stock limit
+            </label>
+            <input
+              type="number"
+              name="low_stock_limit"
+              min="0"
+              step="1"
+              value={formData.low_stock_limit}
+              onChange={handleFormChange}
+              placeholder="0"
+              className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Warning limit for low-stock alerts. Quantity can only be adjusted via Change Stock.
+            </p>
+          </div>
+        </form>
+      </Drawer>
 
       {/* CHANGE STOCK MODAL */}
-      {showStockForm &&
-        stockItem && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">
-                    Change Stock
-                  </h2>
+      {showStockForm && stockItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Change Stock
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {stockItem.name}
+                </p>
+              </div>
 
-                  <p className="mt-1 text-sm text-gray-500">
-                    {
-                      stockItem.name
-                    }
-                  </p>
-                </div>
+              <button
+                type="button"
+                onClick={handleCloseStockForm}
+                disabled={stockSaving}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-lg leading-none text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
 
+            <div className="mb-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Current Stock
+              </p>
+              <p className="mt-1 text-2xl font-bold text-slate-900">
+                {stockItem.quantity} {stockItem.unit}
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitStockChange} className="space-y-4">
+              {/* STOCK CHANGE */}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Stock Change
+                </label>
+
+                <input
+                  type="number"
+                  value={stockChange}
+                  onChange={(e) => setStockChange(e.target.value)}
+                  placeholder="Example: 50 or -10"
+                  step="1"
+                  required
+                  disabled={stockSaving}
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:bg-slate-100"
+                />
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Use a positive number to add stock and a negative number to reduce stock.
+                </p>
+              </div>
+
+              {/* REASON */}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Reason
+                </label>
+
+                <input
+                  type="text"
+                  value={stockReason}
+                  onChange={(e) => setStockReason(e.target.value)}
+                  placeholder="Example: Stock count correction"
+                  required
+                  disabled={stockSaving}
+                  className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-500/30 disabled:bg-slate-100"
+                />
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={
-                    handleCloseStockForm
-                  }
-                  disabled={
-                    stockSaving
-                  }
-                  className="text-xl text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                  onClick={handleCloseStockForm}
+                  disabled={stockSaving}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
-                  ×
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={stockSaving}
+                  className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {stockSaving ? "Saving..." : "Confirm Stock Change"}
                 </button>
               </div>
-
-              <div className="mb-5 rounded-md bg-gray-50 p-4">
-                <p className="text-sm text-gray-500">
-                  Current Stock
-                </p>
-
-                <p className="mt-1 text-2xl font-bold text-gray-900">
-                  {
-                    stockItem.quantity
-                  }{" "}
-                  {
-                    stockItem.unit
-                  }
-                </p>
-              </div>
-
-              <form
-                onSubmit={
-                  handleSubmitStockChange
-                }
-              >
-                <div className="space-y-4">
-                  {/* STOCK CHANGE */}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Stock Change
-                    </label>
-
-                    <input
-                      type="number"
-                      value={
-                        stockChange
-                      }
-                      onChange={(
-                        e
-                      ) =>
-                        setStockChange(
-                          e
-                            .target
-                            .value
-                        )
-                      }
-                      placeholder="Example: 50 or -10"
-                      step="1"
-                      required
-                      disabled={
-                        stockSaving
-                      }
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 disabled:bg-gray-100"
-                    />
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      Use a positive number to add stock and a negative number to reduce stock.
-                    </p>
-                  </div>
-
-                  {/* REASON */}
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">
-                      Reason
-                    </label>
-
-                    <input
-                      type="text"
-                      value={
-                        stockReason
-                      }
-                      onChange={(
-                        e
-                      ) =>
-                        setStockReason(
-                          e
-                            .target
-                            .value
-                        )
-                      }
-                      placeholder="Example: Stock count correction"
-                      required
-                      disabled={
-                        stockSaving
-                      }
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-blue-500 disabled:bg-gray-100"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={
-                      handleCloseStockForm
-                    }
-                    disabled={
-                      stockSaving
-                    }
-                    className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={
-                      stockSaving
-                    }
-                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {stockSaving
-                      ? "Saving..."
-                      : "Confirm Stock Change"}
-                  </button>
-                </div>
-              </form>
-            </div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
       {/* HISTORY MODAL */}
       {showHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-5xl rounded-lg bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl">
             {/* HISTORY HEADER */}
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-lg font-semibold text-slate-900">
                   Stock History
                 </h2>
 
                 {historyItem && (
-                  <p className="mt-1 text-sm text-gray-500">
-                    {
-                      historyItem.name
-                    }{" "}
-                    — Current Stock:{" "}
-                    {
-                      historyItem.quantity
-                    }{" "}
-                    {
-                      historyItem.unit
-                    }
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    {historyItem.name} — Current Stock: {historyItem.quantity} {historyItem.unit}
                   </p>
                 )}
               </div>
 
               <button
                 type="button"
-                onClick={
-                  handleCloseHistory
-                }
-                disabled={
-                  historyLoading
-                }
-                className="text-xl text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                onClick={handleCloseHistory}
+                disabled={historyLoading}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-lg leading-none text-slate-500 hover:bg-slate-50 disabled:opacity-50"
               >
                 ×
               </button>
@@ -1505,134 +1275,82 @@ function Inventory() {
 
             {/* HISTORY ERROR */}
             {historyError && (
-              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-                {
-                  historyError
-                }
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {historyError}
               </div>
             )}
 
             {/* HISTORY LOADING */}
             {historyLoading ? (
-              <div className="rounded-md border bg-gray-50 p-8 text-center text-gray-500">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-8 text-center text-sm text-slate-500">
                 Loading stock history...
               </div>
-            ) : history.length ===
-              0 ? (
-              <div className="rounded-md border bg-gray-50 p-8 text-center text-gray-500">
+            ) : history.length === 0 ? (
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-8 text-center text-sm text-slate-500">
                 No stock history found.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
-                        Date / Time
-                      </th>
-
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
-                        Changed Via
-                      </th>
-
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
-                        Change Qty
-                      </th>
-
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
-                        Balance After
-                      </th>
-
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
-                        Reason
-                      </th>
-
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600">
-                        Changed By
-                      </th>
+                      <th className="px-4 py-3 text-left">Date / Time</th>
+                      <th className="px-4 py-3 text-left">Changed Via</th>
+                      <th className="px-4 py-3 text-left">Change Qty</th>
+                      <th className="px-4 py-3 text-left">Balance After</th>
+                      <th className="px-4 py-3 text-left">Reason</th>
+                      <th className="px-4 py-3 text-left">Changed By</th>
                     </tr>
                   </thead>
 
-                  <tbody className="divide-y divide-gray-200 bg-white">
-                    {history.map(
-                      (
-                        entry,
-                        index
-                      ) => {
-                        const changeQty =
-                          Number(
-                            entry.change_qty ||
-                              0
-                          );
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {history.map((entry, index) => {
+                      const changeQty = Number(entry.change_qty || 0);
 
-                        return (
-                          <tr
-                            key={
-                              entry.id ||
-                              index
-                            }
+                      return (
+                        <tr key={entry.id || index} className="hover:bg-slate-50/50">
+                          <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                            {formatDateTime(
+                              entry.created_at ||
+                                entry.changed_at ||
+                                entry.createdAt
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3 text-slate-600">
+                            {entry.changed_via || entry.changedVia || "-"}
+                          </td>
+
+                          <td
+                            className={`whitespace-nowrap px-4 py-3 font-semibold ${
+                              changeQty > 0
+                                ? "text-emerald-600"
+                                : changeQty < 0
+                                ? "text-rose-600"
+                                : "text-slate-600"
+                            }`}
                           >
-                            <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                              {formatDateTime(
-                                entry.created_at ||
-                                  entry.changed_at ||
-                                  entry.createdAt
-                              )}
-                            </td>
+                            {changeQty > 0 ? `+${changeQty}` : changeQty}
+                          </td>
 
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {
-                                entry.changed_via ||
-                                  entry.changedVia ||
-                                  "-"
-                              }
-                            </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {entry.balance_after ?? entry.balanceAfter ?? "-"}{" "}
+                            {historyItem?.unit}
+                          </td>
 
-                            <td
-                              className={`whitespace-nowrap px-4 py-3 text-sm font-semibold ${
-                                changeQty >
-                                0
-                                  ? "text-green-600"
-                                  : changeQty <
-                                    0
-                                  ? "text-red-600"
-                                  : "text-gray-600"
-                              }`}
-                            >
-                              {changeQty >
-                              0
-                                ? `+${changeQty}`
-                                : changeQty}
-                            </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {entry.reason || "-"}
+                          </td>
 
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {entry.balance_after ??
-                                entry.balanceAfter ??
-                                "-"}{" "}
-                              {
-                                historyItem?.unit
-                              }
-                            </td>
-
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {
-                                entry.reason ||
-                                  "-"
-                              }
-                            </td>
-
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {
-                                entry.changed_by_name ||
-                                  entry.changedByName ||
-                                  entry.changed_by ||
-                                  "-"
-                              }
-                            </td>
-                          </tr>
-                        );
-                      }
-                    )}
+                          <td className="px-4 py-3 text-slate-600">
+                            {entry.changed_by_name ||
+                              entry.changedByName ||
+                              entry.changed_by ||
+                              "-"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1642,13 +1360,9 @@ function Inventory() {
             <div className="mt-5 flex justify-end">
               <button
                 type="button"
-                onClick={
-                  handleCloseHistory
-                }
-                disabled={
-                  historyLoading
-                }
-                className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                onClick={handleCloseHistory}
+                disabled={historyLoading}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 Close
               </button>
