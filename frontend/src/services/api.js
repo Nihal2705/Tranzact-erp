@@ -1,22 +1,26 @@
 import axios from "axios";
 
-const api = axios.create({
-  baseURL: "http://localhost:5000",
+const client = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
 });
 
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
+client.interceptors.request.use((cfg) => {
+  const t = localStorage.getItem("token");
+  if (t) cfg.headers.Authorization = `Bearer ${t}`;
+  return cfg;
+});
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+export async function api(path, { method = "GET", body, params } = {}) {
+  try {
+    const res = await client.request({ url: path, method, data: body, params });
+    return res.data;
+  } catch (err) {
+    if (err.response?.status === 401 && !window.location.pathname.includes("/login")) {
+      localStorage.clear();
+      window.location.href = "/login";
     }
-
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+    throw err;   // Axios errors already have err.response.status and err.response.data
   }
-);
+}
 
 export default api;
