@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell,
 } from "recharts";
 import {
-  IndianRupee, AlertTriangle, ShoppingCart, FileText, Truck, CheckCircle2, CircleCheck,
+  IndianRupee, AlertTriangle, ShoppingCart, FileText, Truck, CheckCircle2,
 } from "lucide-react";
 import api from "../services/api";
 
@@ -201,11 +201,6 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
-
-     
-        
-        
-      
     </div>
   );
 }
