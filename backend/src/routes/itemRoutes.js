@@ -1,28 +1,61 @@
 const express = require("express");
+
 const router = express.Router();
-const { requireAuth, allowRoles } = require("../middleware/auth");
+
 const {
   getItems,
   createItem,
   updateItem,
   changeItemStock,
   getItemHistory,
-  getLowStockItems
+  getLowStockItems,
 } = require("../controllers/itemController");
 
-// 1. Specific routes first (BEFORE /:id)
-router.get("/low-stock", requireAuth, allowRoles("Admin", "Manager", "Worker"), getLowStockItems);
+const {
+  requireAuth,
+  allowRoles,
+} = require("../middleware/auth");
 
-// 2. Collection routes
-router.get("/", requireAuth, allowRoles("Admin", "Manager", "Worker"), getItems);
-router.post("/", requireAuth, allowRoles("Admin", "Manager"), createItem);
+// All inventory routes require login
+router.use(requireAuth);
 
-// 3. Sub-resource routes under :id
-router.put("/:id/stock", requireAuth, allowRoles("Admin", "Manager", "Worker"), changeItemStock);
-router.get("/:id/history", requireAuth, allowRoles("Admin", "Manager", "Worker"), getItemHistory);
+// GET /api/items
+// Admin, Manager, Worker can view inventory
+router.get("/", getItems);
 
-// 4. Parameterized route
-router.put("/:id", requireAuth, allowRoles("Admin", "Manager"), updateItem);
+// GET /api/items/low-stock
+// Admin, Manager, Worker can view low-stock items
+router.get("/low-stock", getLowStockItems);
+
+// POST /api/items
+// Only Admin and Manager can add items
+router.post(
+  "/",
+  allowRoles("Admin", "Manager"),
+  createItem
+);
+
+// PUT /api/items/:id
+// Only Admin and Manager can edit item details
+router.put(
+  "/:id",
+  allowRoles("Admin", "Manager"),
+  updateItem
+);
+
+// PUT /api/items/:id/stock
+// Admin, Manager, Worker can change stock
+router.put(
+  "/:id/stock",
+  allowRoles("Admin", "Manager", "Worker"),
+  changeItemStock
+);
+
+// GET /api/items/:id/history
+// Admin, Manager, Worker can view stock history
+router.get(
+  "/:id/history",
+  getItemHistory
+);
 
 module.exports = router;
-
