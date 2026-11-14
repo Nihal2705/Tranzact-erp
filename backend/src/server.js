@@ -13,7 +13,26 @@ const orderRoutes = require("./routes/orderRoutes");
 const productionRoutes = require("./routes/productionRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 
-app.use(cors({ origin: FRONTEND_URL }));
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(",").map((s) => s.trim())
+  : ["http://localhost:5173", "http://localhost:3000"];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Routes
