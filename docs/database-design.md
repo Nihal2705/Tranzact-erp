@@ -132,9 +132,9 @@ It stores all data for Inventory, Orders, Production and Reports.
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | admin@tranzact.com | Admin@123 |
-| Manager | manager@tranzact.com | Manager@123 |
-| Worker | worker@tranzact.com | Worker@123 |
+| Admin | admin@tranzact.com | admin@123 |
+| Manager | manager@tranzact.com | manager@123 |
+| Worker | worker@tranzact.com | worker@123 |
 
 ---
 
